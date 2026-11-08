@@ -27,7 +27,7 @@ export default function AssetGallery() {
     } catch {
       if (request === requests.current) setError('Could not load the gallery. Check the server and try again.');
     } finally {
-      if (request === requests.current) setLoading(false);
+      setLoading(false);
     }
   }, []);
 

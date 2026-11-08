@@ -43,7 +43,7 @@ export default function PlaylistManager() {
     } catch {
       if (request === requests.current) setError('Could not load collections. Check the server and try again.');
     } finally {
-      if (request === requests.current) setLoading(false);
+      setLoading(false);
     }
   }, []);
 

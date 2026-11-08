@@ -59,7 +59,7 @@ export default function DisplayManager() {
     } catch {
       if (request === requests.current) setError('Could not refresh displays. Check the server and try again.');
     } finally {
-      if (request === requests.current) setLoading(false);
+      setLoading(false);
     }
   }, []);
 
