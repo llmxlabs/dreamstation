@@ -12,7 +12,7 @@ import { Database, HardDrive, ShieldCheck } from 'lucide-react';
 
 function SystemStatus() {
   return (
-    <LiquidGlassPanel ambient="cyan" animate={false} className="p-6">
+    <LiquidGlassPanel animate={false} className="p-6">
       <div className="flex items-center gap-3 mb-6">
         <div className="p-1.5 rounded-xl bg-green-500/10 border border-green-500/20">
           <ShieldCheck className="w-4 h-4 text-green-400" />

@@ -7,9 +7,6 @@ export interface LiquidGlassPanelProps {
   children: React.ReactNode;
   className?: string;
   size?: 'sm' | 'lg';
-  /** Reserved for API compat — no longer drives 3D tilt */
-  tilt?: boolean;
-  ambient?: 'cyan' | 'violet' | 'amber';
   animate?: boolean;
   delay?: number;
 }

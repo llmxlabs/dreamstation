@@ -144,6 +144,18 @@ test('media validation, storage and streaming on isolated data', async (t) => {
       assert.equal((await actions.deleteAsset(assets[0].id)).success, true);
       assert.equal(await prisma.asset.count(), 0); assert.deepEqual(await list(), []);
     });
+
+    await t.test('committed deletion succeeds if cache invalidation fails', async () => {
+      const form = new FormData(); form.append('file', image());
+      assert.equal((await actions.uploadAsset(form)).success, true);
+      const asset = (await prisma.asset.findFirst())!;
+      invalidateFails = true;
+      try {
+        assert.deepEqual(await actions.deleteAsset(asset.id), { success: true });
+      } finally { invalidateFails = false; }
+      assert.equal(await prisma.asset.count(), 0);
+      assert.deepEqual(await list(), []);
+    });
   } finally {
     process.chdir(root);
     await disconnect?.();

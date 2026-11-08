@@ -55,7 +55,7 @@ export async function deleteAsset(assetId: string) {
     // Database references disappear atomically before physical cleanup.
     const cleanup = await Promise.allSettled([asset.originalUrl, asset.resizedUrl, asset.thumbnailUrl].filter((url): url is string => !!url).map(deleteFile));
     if (cleanup.some(result => result.status === 'rejected')) console.warn('An unused media file could not be removed. Check storage permissions.');
-    revalidatePath('/');
+    try { revalidatePath('/'); } catch {}
     return { success: true };
   } catch {
     return { success: false, error: 'Failed to delete asset' };
