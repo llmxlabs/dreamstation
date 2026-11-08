@@ -1,0 +1,94 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  password     String
+  name         String?
+  assets       Asset[]
+  displays     Display[]
+  playlists    Playlist[]
+  pairingCodes PairingCode[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model PairingCode {
+  id        String   @id @default(uuid())
+  code      String   @unique // 6-digit code
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model Asset {
+  id            String          @id @default(uuid())
+  userId        String
+  user          User            @relation(fields: [userId], references: [id])
+  kind          String          // "IMAGE", etc.
+  originalUrl   String
+  resizedUrl    String?
+  thumbnailUrl  String?
+  size          Int             // in bytes
+  playlistItems PlaylistItem[]
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+}
+
+model Display {
+  id                String     @id @default(uuid())
+  userId            String
+  user              User       @relation(fields: [userId], references: [id])
+  name              String
+  status            String     @default("OFFLINE") // "ONLINE", "OFFLINE"
+  config            Json?      // display-specific configuration
+  assignedPlaylistId String?
+  assignedPlaylist  Playlist? @relation(fields: [assignedPlaylistId], references: [id])
+  heartbeats        Heartbeat[]
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+}
+
+model Playlist {
+  id        String          @id @default(uuid())
+  userId    String
+  user      User            @relation(fields: [userId], references: [id])
+  name      String
+  items     PlaylistItem[]
+  displays  Display[]
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+}
+
+model PlaylistItem {
+  id         String   @id @default(uuid())
+  playlistId String
+  playlist   Playlist @relation(fields: [playlistId], references: [id])
+  assetId    String
+  asset      Asset    @relation(fields: [assetId], references: [id])
+  sortOrder  Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Heartbeat {
+  id        String   @id @default(uuid())
+  displayId String
+  display   Display  @relation(fields: [displayId], references: [id])
+  battery   Int?
+  network   String?
+  seenAt    DateTime @default(now())
+}

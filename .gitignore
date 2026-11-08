@@ -1,0 +1,36 @@
+# Dependencies and generated builds
+/node_modules/
+/.next/
+/out/
+/build/
+/coverage/
+/src/generated/prisma/
+next-env.d.ts
+*.tsbuildinfo
+
+# Local configuration, database and uploaded artwork
+.env*
+!.env.example
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+/public/uploads/
+*.pem
+.vercel/
+.DS_Store
+*-debug.log*
+
+# Private review evidence, drafts and archived prototypes
+/.security/
+/.release/
+/temp-next/
+/build-docs/
+/tasks/
+/CLAUDE.md
+/.claude/
+/.windsurf/
+/test-*.ts
+/test-*.js
+/scripts/migrate-pg-to-sqlite.mjs
