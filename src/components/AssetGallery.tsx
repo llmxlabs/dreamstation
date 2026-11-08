@@ -20,11 +20,14 @@ export default function AssetGallery() {
     const request = ++requests.current;
     try {
       const data = await getAssets();
-      if (request === requests.current) setAssets(data);
+      if (request === requests.current) {
+        setAssets(data);
+        setError(previous => previous === 'Could not load the gallery. Check the server and try again.' ? null : previous);
+      }
     } catch {
-      setError('Could not load the gallery. Check the server and try again.');
+      if (request === requests.current) setError('Could not load the gallery. Check the server and try again.');
     } finally {
-      setLoading(false);
+      if (request === requests.current) setLoading(false);
     }
   }, []);
 

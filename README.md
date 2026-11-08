@@ -60,7 +60,7 @@ Open `http://YOUR-LAN-IP:3000` from the dashboard device and display devices. Al
 
 ## Your first collection
 
-1. Upload your artwork, or try the original samples in [`examples/media`](examples/media).
+1. Upload your artwork, or try the original and community samples in [`examples/media`](examples/media). The [community source and rights record](examples/media/community/SOURCES.md) identifies the third-party works.
 2. Enter a collection name in **Curation** and press **+**. Expand the collection and select images/videos to add them. Enable **Auto-add to collection** to send subsequent uploads there automatically.
 3. Click **Pair** under **Active Displays**. On your screen, open `/pair`, enter the code and give the screen a name. A QR code can prefill the code.
 4. Assign the collection to the new display. Choose **Contain** to show the whole artwork or **Cover** to fill the screen. Set the rotation interval.
@@ -94,8 +94,8 @@ One Node.js process serves the dashboard, pairing and player. Prisma stores coll
 | `src/lib` | SQLite client and media processing |
 | `prisma` | Schema and idempotent local-profile seed |
 | `tests` | Isolated SQLite and media regression tests |
-| `examples/media` | Original demo images and an eight-second sample clip |
-| `docs` | Deployment, architecture, security records and demo media |
+| `examples/media` | Original demo images and clip, plus credited third-party community samples in [`community`](examples/media/community/SOURCES.md) |
+| `docs` | Deployment, architecture, security records, real screenshots and edited demo media |
 
 ## Configuration and maintenance
 
@@ -122,6 +122,6 @@ The release review resolved dependency, upload-handling, setup and lifecycle fin
 
 ## Artwork and license
 
-Code is licensed under [MIT](LICENSE). The included sample artwork was generated specifically for this project; see [media provenance](docs/MEDIA.md). The image below is an AI-generated concept illustration, not a photograph of supplied hardware. DreamStation is software; bring your own screen.
+Code and original project artwork are provided under [MIT](LICENSE) to the extent rights are held; see [media provenance](docs/MEDIA.md). The [community samples](examples/media/community/SOURCES.md) are third-party media included with permission for DreamStation demo and sample use and are not covered by the MIT license. The image below is an AI-generated concept illustration, not a photograph of supplied hardware. DreamStation is software; bring your own screen.
 
 ![Concept illustration of DreamStation on a living-room display](docs/media/dreamstation-concept.png)

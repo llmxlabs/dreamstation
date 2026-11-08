@@ -55,10 +55,11 @@ export default function DisplayManager() {
       if (request !== requests.current) return;
       setDisplays(dData.map(d => ({ ...d, config: { ...normalizeConfig(d.config), ...pendingConfig.current[d.id] } })));
       setPlaylists(pData);
+      setError(previous => previous === 'Could not refresh displays. Check the server and try again.' ? null : previous);
     } catch {
-      setError('Could not refresh displays. Check the server and try again.');
+      if (request === requests.current) setError('Could not refresh displays. Check the server and try again.');
     } finally {
-      setLoading(false);
+      if (request === requests.current) setLoading(false);
     }
   }, []);
 

@@ -29,6 +29,7 @@ export default function PlaylistManager() {
     const playlists = pData || [];
     setPlaylists(playlists);
     setAssets(aData || []);
+    setError(previous => previous === 'Could not load collections. Check the server and try again.' ? null : previous);
     // Default: collapsed if has items, expanded if empty
     setCollapsed((prev) => {
       const next: Record<string, boolean> = { ...prev };
@@ -40,9 +41,9 @@ export default function PlaylistManager() {
       return next;
     });
     } catch {
-      setError('Could not load collections. Check the server and try again.');
+      if (request === requests.current) setError('Could not load collections. Check the server and try again.');
     } finally {
-      setLoading(false);
+      if (request === requests.current) setLoading(false);
     }
   }, []);
 
