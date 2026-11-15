@@ -8,7 +8,7 @@ import {
   updateDisplayConfig,
   deleteDisplay,
 } from "@/actions/displays";
-import { getPlaylists, assignPlaylistToDisplay } from "@/actions/playlists";
+import { getPlaylists, assignPlaylistsToDisplay } from "@/actions/playlists";
 import QRCode from "qrcode";
 import Image from 'next/image';
 import {
@@ -45,6 +45,7 @@ export default function DisplayManager() {
   const [pairingUrl, setPairingUrl] = useState('');
   const debounceTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const pendingConfig = useRef<Record<string, Partial<DisplayConfig>>>({});
+  const pendingPlaylists = useRef<Record<string, { playlistIds: string[]; playAll: boolean }>>({});
   const configWrites = useRef<Record<string, Promise<void>>>({});
   const requests = useRef(0);
 
@@ -53,7 +54,7 @@ export default function DisplayManager() {
     try {
       const [dData, pData] = await Promise.all([getDisplays(), getPlaylists()]);
       if (request !== requests.current) return;
-      setDisplays(dData.map(d => ({ ...d, config: { ...normalizeConfig(d.config), ...pendingConfig.current[d.id] } })));
+      setDisplays(dData.map(d => ({ ...d, ...pendingPlaylists.current[d.id], config: { ...normalizeConfig(d.config), ...pendingConfig.current[d.id] } })));
       setPlaylists(pData);
       setError(previous => previous === 'Could not refresh displays. Check the server and try again.' ? null : previous);
     } catch {
@@ -67,12 +68,14 @@ export default function DisplayManager() {
     fetchData();
     const interval = setInterval(fetchData, 30000); // Poll for new displays every 30s
     window.addEventListener('playlists-updated', fetchData);
+    window.addEventListener('assets-updated', fetchData);
     window.addEventListener('displays-updated', fetchData);
     const timers = debounceTimers.current;
     return () => {
       clearInterval(interval);
       Object.values(timers).forEach(clearTimeout);
       window.removeEventListener('playlists-updated', fetchData);
+      window.removeEventListener('assets-updated', fetchData);
       window.removeEventListener('displays-updated', fetchData);
     };
   }, [fetchData]);
@@ -114,19 +117,25 @@ export default function DisplayManager() {
     }
   };
 
-  const handleAssignPlaylist = async (
+  const handleAssignPlaylists = async (
     displayId: string,
-    playlistId: string,
+    playlistIds: string[],
+    playAll = false,
   ) => {
+    if (Object.keys(pendingPlaylists.current).length) return;
+    pendingPlaylists.current[displayId] = { playlistIds, playAll };
+    ++requests.current;
+    setDisplays(previous => previous.map(display => display.id === displayId ? { ...display, playlistIds, playAll } : display));
     setBusy(displayId);
     setError(null);
     try {
-      const result = await assignPlaylistToDisplay(displayId, playlistId === 'none' ? null : playlistId);
-      if (!result.success) throw new Error(result.error || 'Could not assign collection');
-      await fetchData();
+      const result = await assignPlaylistsToDisplay(displayId, playlistIds, playAll);
+      if (!result.success) throw new Error(result.error || 'Could not update selected groups');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not assign collection. Try again.');
+      setError(err instanceof Error ? err.message : 'Could not update selected groups. Try again.');
     } finally {
+      delete pendingPlaylists.current[displayId];
+      await fetchData();
       setBusy(null);
     }
   };
@@ -315,32 +324,57 @@ export default function DisplayManager() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <label className="flex items-center gap-1.5 px-1">
+                <fieldset disabled={busy !== null} className="mb-4 min-w-0">
+                  <legend className="flex items-center gap-1.5 px-1 mb-2">
                       <PlayCircle className="w-3 h-3 text-zinc-500" />
                       <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">
-                        Playlist
+                        Groups to play
                       </span>
+                  </legend>
+                  <div className="space-y-1.5">
+                    <label className={`flex items-start gap-2.5 rounded-xl border px-3 py-2.5 cursor-pointer ${display.playAll ? 'border-blue-400/25 bg-blue-500/10 text-white' : 'border-white/5 bg-black/20 text-zinc-400'}`}>
+                      <input
+                        type="checkbox"
+                        aria-label={`Play all artwork on ${display.name}`}
+                        checked={display.playAll}
+                        onChange={event => handleAssignPlaylists(display.id, display.playlistIds, event.target.checked)}
+                        className="mt-0.5 h-4 w-4 shrink-0 accent-blue-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400"
+                      />
+                      <span className="min-w-0 flex-1 text-[11px] leading-5 font-bold">
+                        All artwork
+                        <span className="block text-[10px] leading-4 font-normal text-zinc-500">Includes future uploads automatically.</span>
+                      </span>
+                      <span className="shrink-0 text-[10px] leading-5 tabular-nums text-zinc-500">{display.libraryAssetCount}</span>
                     </label>
-                    <select
-                      aria-label={`Collection for ${display.name}`}
-                      disabled={busy !== null}
-                      value={display.assignedPlaylistId || "none"}
-                      onChange={(e) =>
-                        handleAssignPlaylist(display.id, e.target.value)
-                      }
-                      className="w-full bg-black/40 border border-white/5 rounded-xl px-2 py-1.5 text-[11px] font-bold text-zinc-300 focus:outline-none focus:ring-1 focus:ring-blue-500/50 appearance-none transition-all cursor-pointer"
-                    >
-                      <option value="none">None</option>
-                      {playlists.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name}
-                        </option>
-                      ))}
-                    </select>
+                    {playlists.map(playlist => (
+                      <label key={playlist.id} className={`flex items-start gap-2.5 rounded-xl border px-3 py-2.5 cursor-pointer transition-colors ${display.playlistIds.includes(playlist.id) ? 'border-blue-400/25 bg-blue-500/10 text-white' : 'border-white/5 bg-black/20 text-zinc-400'} ${display.playAll ? 'opacity-40 cursor-default' : busy !== null ? 'opacity-60 cursor-wait' : 'hover:border-blue-400/30'}`}>
+                        <input
+                          type="checkbox"
+                          aria-label={`Play ${playlist.name} on ${display.name}`}
+                          checked={display.playlistIds.includes(playlist.id)}
+                          disabled={display.playAll}
+                          onChange={event => handleAssignPlaylists(display.id, event.target.checked ? [...display.playlistIds, playlist.id] : display.playlistIds.filter(id => id !== playlist.id))}
+                          className="mt-0.5 h-4 w-4 shrink-0 accent-blue-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-400"
+                        />
+                        <span className="min-w-0 flex-1 break-words text-[11px] leading-5 font-bold">{playlist.name}</span>
+                        <span className="shrink-0 text-[10px] leading-5 tabular-nums text-zinc-500">{playlist.items.length}</span>
+                      </label>
+                    ))}
+                    {!playlists.length && !display.playAll && <p className="text-xs text-zinc-500">Choose All artwork or create a collection for this display.</p>}
                   </div>
+                  <div className="mt-2 flex items-center justify-between gap-2 text-[10px]">
+                    <span role="status" className="text-zinc-400">
+                      {display.playAll ? display.libraryAssetCount : new Set(playlists.filter(playlist => display.playlistIds.includes(playlist.id)).flatMap(playlist => playlist.items.map(item => item.assetId))).size} items selected
+                    </span>
+                    <div className="flex gap-3 text-blue-400">
+                      <button type="button" disabled={display.playAll} onClick={() => handleAssignPlaylists(display.id, display.playlistIds, true)} aria-label={`Select all artwork for ${display.name}`} className="hover:text-blue-200 disabled:opacity-40">All</button>
+                      <button type="button" disabled={!display.playAll && !display.playlistIds.length} onClick={() => handleAssignPlaylists(display.id, [])} aria-label={`Clear groups for ${display.name}`} className="hover:text-blue-200 disabled:opacity-40">Clear</button>
+                    </div>
+                  </div>
+                  <p className="mt-1.5 text-[10px] leading-relaxed text-zinc-500">Shared artwork plays once.</p>
+                </fieldset>
 
+                <div className="grid grid-cols-1 gap-3">
                   <div className="space-y-1.5">
                     <label className="flex items-center gap-1.5 px-1">
                       <Settings2 className="w-3 h-3 text-zinc-500" />

@@ -7,7 +7,7 @@ DreamStation Frame is a single-user application for a trusted home or studio LAN
 ```mermaid
 flowchart LR
   Dashboard[Dashboard browser] -->|Server Actions| Server[Next.js 16 / React 19]
-  Display[Display browser] -->|Pairing, playlist polling, heartbeat| Server
+  Display[Display browser] -->|Pairing, live playlist sync, heartbeat| Server
   Server -->|Prisma 7 / better-sqlite3| DB[(SQLite)]
   Server -->|Sharp / bundled FFmpeg| Media[(public/uploads)]
   Display -->|GET /uploads/filename; byte ranges| Server
@@ -28,7 +28,7 @@ The UI uses Tailwind CSS, Framer Motion, and Lucide icons. Prisma's generated cl
 
 ## Data model
 
-`User` is a fixed local profile created by the seed command, not a login account. `Asset` records point to the original file and generated previews. A `Playlist` contains ordered `PlaylistItem` records, each referencing an asset. Each `Display` can have one assigned playlist and stores its own fit mode and rotation interval. `PairingCode` records expire after ten minutes. `Heartbeat` retains the latest observation for a display.
+`User` is a fixed local profile created by the seed command, not a login account. `Asset` records point to the original file and generated previews. A `Playlist` contains ordered `PlaylistItem` records, each referencing an asset. Each `Display` stores checked collection IDs in `config.playlistIds`, alongside fit mode and rotation interval. With `config.playAll` enabled, playback reads all assets in the local profile directly, including future uploads outside any collection. New displays default to this mode. Playback combines these collections in selection order and removes duplicate asset IDs. The legacy `assignedPlaylistId` retains the first selection for compatibility; displays without the new configuration continue using their previous assignment. `PairingCode` records expire after ten minutes. `Heartbeat` retains the latest observation for a display.
 
 Pairing consumes a code and creates a display in one database transaction. Collection changes and dependent-record deletion are transactional. Adding an asset already present in a collection is idempotent. Display configuration updates merge partial changes, so changing fit mode does not reset the rotation interval.
 
@@ -42,9 +42,9 @@ Media preparation precedes the asset-record transaction. Failed preparation or a
 
 ## Playback and connectivity
 
-The player requests its playlist and sends a heartbeat every 30 seconds. Configuration changes therefore propagate on the next poll. The dashboard considers a display online only when its latest heartbeat is less than 90 seconds old. This reports recent contact with the server, not a hardware power measurement.
+The player uses stable `/api/displays/<id>/playlist`, `/events`, and `/heartbeat` endpoints so an open player can keep syncing across app deployments. SQLite file events trigger a playlist refresh, including changes committed by the separate downloader CLI. EventSource reconnects automatically; five-second polling and browser visibility/connection events provide recovery if event delivery is interrupted. Requests bypass browser caching. Heartbeats run every 30 seconds. The dashboard considers a display online only when its latest heartbeat is less than 90 seconds old. This reports recent contact with the server, not a hardware power measurement.
 
-Images and muted looping videos rotate at the selected 5–600 second interval. Shuffle is enabled initially and can be toggled in the player. The current slide and neighboring slides are rendered to limit resource use. A temporary failed playlist request keeps the last successfully loaded playlist; this is not a full offline cache, and unavailable media may still fail to load.
+Images and muted looping videos rotate at the selected 5–600 second interval. Shuffle is enabled initially and can be toggled in the player. The current slide and neighboring slides are rendered to limit resource use. Library updates retain the current artwork when it still exists, append new shuffled items, and remove deleted items; replaced media URLs also update without a page refresh. A temporary failed playlist request keeps the last successfully loaded playlist; this is not a full offline cache, and unavailable media may still fail to load.
 
 The dynamic media route serves files added after a production build. It supports `GET`, `HEAD`, and one HTTP byte range, including partial responses used for video seeking. Invalid ranges return `416`; missing or invalid paths return `404`. Responses restrict MIME types and include `nosniff`. Files are read in chunks rather than loading an entire video into server memory for every request.
 

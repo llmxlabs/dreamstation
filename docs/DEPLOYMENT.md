@@ -80,7 +80,7 @@ NEXT_PUBLIC_APP_URL="http://192.168.1.100:3000"
 
 Run `npm run build` again after changing this variable. It is embedded in the browser bundle. Reserve the server's address in your router if you want bookmarks and QR links to remain stable. To change the listening port, pass `--port 3001` (or another free port) and update the pairing URL accordingly; setting `PORT` inside `.env` is not the documented startup mechanism.
 
-Pair a display from the dashboard, enter the six-digit code at `/pair`, and assign a collection. Codes expire after ten minutes. Bookmark the resulting `/player/<display-id>` URL on the display. Playlist/configuration polling takes up to roughly 30 seconds; a disconnected display becomes offline after 90 seconds without a heartbeat, plus the dashboard's refresh delay.
+Pair a display from the dashboard and enter the six-digit code at `/pair`. Under **Groups to play**, **All artwork** includes every current and future upload. Uncheck it to choose specific collections. Selected collections play together, and shared artwork appears once. Adding artwork to a checked collection includes it on the display automatically. Codes expire after ten minutes. Bookmark the resulting `/player/<display-id>` URL on the display. Library and configuration changes sync through server events, with a five-second polling fallback; a disconnected display becomes offline after 90 seconds without a heartbeat, plus the dashboard's refresh delay.
 
 ## Persistent data and backups
 
@@ -89,6 +89,7 @@ Pair a display from the dashboard, enter the six-digit code at `/pair`, and assi
 | `prisma/dev.db` | Assets, collections, display assignments, and configuration |
 | `public/uploads/` | Original media and generated previews |
 | `.env` | Local database location and optional pairing URL |
+| `.release/state/` or `DREAMSTATION_STATE_DIR` | Private import drafts, provenance, and optional curation preferences |
 
 If you configure another database path, back up that database instead. Source code alone cannot reconstruct your uploaded gallery.
 
@@ -102,6 +103,21 @@ For a consistent backup:
 To restore, stop the destination server, install the same application version and dependencies, and restore the database, matching media directory, and environment file together. Ensure the configured database path exists and is writable, then build and start. Preserve a backup of existing destination data before replacing it. Do not rerun schema setup against restored data unless the version's upgrade instructions require it.
 
 For an always-on installation, use your operating system's service manager to start the production command from this repository directory under an account that can write the database and media directory. Configure automatic restart and preserve logs. Keep a single instance; do not run multiple replicas against the same files.
+
+### Linux startup after reboot
+
+The [example systemd service](../examples/systemd/dreamstation.service) runs independently of desktop login and restarts the app after a failure. Copy it to `/etc/systemd/system/dreamstation.service`, then edit `User`, `Group`, `WorkingDirectory`, `EnvironmentFile`, and both paths in `ExecStart` for your existing installation. Use `command -v node` to find the absolute Node executable. Use an account that owns the database and uploaded files, and build the app before starting the service.
+
+After saving the edited unit:
+
+```sh
+sudo systemctl daemon-reload
+sudo systemctl enable --now dreamstation.service
+systemctl is-enabled dreamstation.service
+systemctl status dreamstation.service
+```
+
+The enabled service starts at boot without an interactive login. Keep any private-network HTTPS proxy or VPN service enabled at boot as well. The source browser for URL imports is a separate Chromium session and must be open when importing links; gallery playback does not require it.
 
 ## Updates and checks
 
@@ -130,7 +146,7 @@ For development, `npm run dev -- --hostname 127.0.0.1 --port 3000` runs the deve
 | Video processing fails | Confirm the bundled FFmpeg binary was installed and may execute; try a short H.264 MP4. Thumbnail decoding times out after 30 seconds. |
 | Upload rejected | Use JPG/PNG/WebP/MP4/WebM; at most 20 files, 50 MiB each, and 100 MiB per batch. Images must be under 40 million pixels and contents must match the declared format. |
 | High memory use during uploads | Upload smaller batches and lower-resolution images. Processing expands compressed images and buffers uploaded files; the file-size limit is not a memory-use guarantee. |
-| Slow or stale display | Allow the next 30-second poll, check collection assignment and connectivity, then reload the player. Existing playback is not a guaranteed offline cache. |
+| Slow or stale display | Allow five seconds, check **All artwork** or the selected groups, and confirm connectivity. After upgrading an older installation to live sync, reload existing player tabs once. If using a custom proxy, allow streaming responses on `/api/displays/*/events`. Existing playback is not a guaranteed offline cache. |
 | Missing media after a move | Restore `public/uploads` together with the database and launch from the correct repository root. |
 
 See [architecture](ARCHITECTURE.md) for the data flow and deployment boundaries.

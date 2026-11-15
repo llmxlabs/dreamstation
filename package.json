@@ -1,11 +1,12 @@
 {
   "name": "dreamstation-frame",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "grab": "tsx scripts/grab-media.ts",
     "lint": "eslint",
     "prisma:seed": "tsx prisma/seed.ts",
     "postinstall": "prisma generate",

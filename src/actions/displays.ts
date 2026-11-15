@@ -3,6 +3,8 @@
 import prisma from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { randomInt } from 'node:crypto';
+import { getDisplayPlaylistIds, playsAllArtwork } from '@/lib/display-playlists';
+import { readDisplayPlaylist, recordDisplayHeartbeat } from '@/lib/display-sync';
 
 const DEFAULT_USER_ID = '00000000-0000-0000-0000-000000000000';
 
@@ -52,6 +54,7 @@ export async function pairDisplay(code: string, displayName: string) {
           name: displayName.trim(),
           userId: pairingCode.userId,
           status: 'OFFLINE',
+          config: { playAll: true, playlistIds: [] },
         },
       });
 
@@ -91,13 +94,16 @@ export async function deleteDisplay(displayId: string) {
 }
 
 export async function getDisplays() {
-  const displays = await prisma.display.findMany({
+  const [displays, libraryAssetCount] = await Promise.all([prisma.display.findMany({
     where: { userId: DEFAULT_USER_ID },
     orderBy: { createdAt: 'desc' },
     include: { heartbeats: { orderBy: { seenAt: 'desc' }, take: 1 } },
-  });
+  }), prisma.asset.count({ where: { userId: DEFAULT_USER_ID } })]);
   return displays.map(({ heartbeats, ...display }) => ({
     ...display,
+    playlistIds: getDisplayPlaylistIds(display),
+    playAll: playsAllArtwork(display),
+    libraryAssetCount,
     status: heartbeats[0] && Date.now() - heartbeats[0].seenAt.getTime() < 90000 ? 'ONLINE' : 'OFFLINE',
   }));
 }
@@ -113,11 +119,11 @@ export async function updateDisplayConfig(displayId: string, config: unknown) {
   try {
     await prisma.$transaction(async (tx) => {
       const display = await tx.display.findUniqueOrThrow({ where: { id: displayId, userId: DEFAULT_USER_ID } });
-      const current = display.config as { rotationInterval?: number; fitMode?: string } | null;
+      const current = display.config && typeof display.config === 'object' && !Array.isArray(display.config) ? display.config : {};
       await tx.display.update({
         where: { id: displayId, userId: DEFAULT_USER_ID },
         data: {
-          config: { rotationInterval: interval ?? current?.rotationInterval ?? 10, fitMode: fitMode ?? current?.fitMode ?? 'contain' },
+          config: { ...current, rotationInterval: interval ?? current.rotationInterval ?? 10, fitMode: fitMode ?? current.fitMode ?? 'contain' },
         },
       });
     });
@@ -130,71 +136,11 @@ export async function updateDisplayConfig(displayId: string, config: unknown) {
 }
 
 export async function getDisplayPlaylist(displayId: string) {
-  try {
-    const display = await prisma.display.findUnique({
-      where: { id: displayId },
-      include: {
-        assignedPlaylist: {
-          include: {
-            items: {
-              include: {
-                asset: true,
-              },
-              orderBy: {
-                sortOrder: 'asc',
-              },
-            },
-          },
-        },
-      },
-    });
-
-    if (!display) {
-      return null;
-    }
-
-    const assets = display.assignedPlaylist?.items.map((item) => item.asset) || [];
-
-    const raw = display.config as { rotationInterval?: number; fitMode?: string } | null;
-    return {
-      assets,
-      config: {
-        rotationInterval: Math.min(600, Math.max(5, Number(raw?.rotationInterval) || 10)),
-        fitMode: raw?.fitMode === 'cover' ? 'cover' as const : 'contain' as const,
-      },
-    };
-  } catch (error) {
-    console.error('Error fetching display playlist:', error);
-    throw new Error('Unable to load display playlist');
-  }
+  return readDisplayPlaylist(displayId);
 }
 
 export async function sendHeartbeat(displayId: string, battery?: number, network?: string) {
-  if (battery !== undefined && (!Number.isInteger(battery) || battery < 0 || battery > 100)) return { success: false };
-  if (network !== undefined && (typeof network !== 'string' || network.length > 32)) return { success: false };
-  try {
-    await prisma.$transaction(async (tx) => {
-      // Only the most recent heartbeat is needed for connectivity status.
-      await tx.heartbeat.deleteMany({ where: { displayId } });
-      await tx.heartbeat.create({
-        data: {
-          displayId,
-          battery,
-          network,
-        },
-      });
-
-      await tx.display.update({
-        where: { id: displayId },
-        data: { status: 'ONLINE', updatedAt: new Date() },
-      });
-    });
-
-    return { success: true };
-  } catch (error) {
-    console.error('Error sending heartbeat:', error);
-    return { success: false };
-  }
+  return recordDisplayHeartbeat(displayId, battery, network);
 }
 
 // A cache refresh failure must not report a committed database mutation as failed.

@@ -18,6 +18,13 @@ next-env.d.ts
 *.sqlite
 *.sqlite3
 /public/uploads/
+/imports/
+/downloads/
+/gallery/
+/browser-profile/
+library-sources.json
+curation-preferences.json
+excluded-media.json
 *.pem
 .vercel/
 .DS_Store

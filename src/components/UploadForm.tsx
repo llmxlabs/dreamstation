@@ -6,6 +6,7 @@ import { uploadAsset } from '@/actions/assets';
 import { getPlaylists, addAssetToPlaylist } from '@/actions/playlists';
 import { Upload, FileVideo, ImageIcon, AlertCircle, CheckCircle2 } from 'lucide-react';
 import GlassPanel from '@/components/GlassPanel';
+import UrlImportForm from '@/components/UrlImportForm';
 
 type Playlist = { id: string; name: string };
 
@@ -13,6 +14,7 @@ const LS_AUTOADD_ENABLED = 'ds_autoadd_enabled';
 const LS_AUTOADD_PLAYLIST = 'ds_autoadd_playlist';
 
 export default function UploadForm() {
+  const [source, setSource] = useState<'files' | 'url'>('url');
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -162,7 +164,12 @@ export default function UploadForm() {
           <h2 className="text-sm font-black text-white tracking-tight uppercase">Upload New Art</h2>
         </div>
 
-        <form ref={formRef} onSubmit={handleSubmit} className="space-y-5">
+        <div className="mb-5 grid grid-cols-2 gap-1 rounded-xl bg-black/30 p-1" role="group" aria-label="Artwork source">
+          <button type="button" onClick={() => setSource('url')} aria-pressed={source === 'url'} className={`rounded-lg px-3 py-2 text-xs font-bold ${source === 'url' ? 'bg-cyan-500/15 text-cyan-300' : 'text-zinc-500'}`}>From a link</button>
+          <button type="button" onClick={() => setSource('files')} aria-pressed={source === 'files'} className={`rounded-lg px-3 py-2 text-xs font-bold ${source === 'files' ? 'bg-cyan-500/15 text-cyan-300' : 'text-zinc-500'}`}>Upload files</button>
+        </div>
+
+        {source === 'url' ? <UrlImportForm /> : <form ref={formRef} onSubmit={handleSubmit} className="space-y-5">
           {/* File picker */}
           <div className="relative">
             <label htmlFor="upload-files" className="block text-xs font-bold text-zinc-400 uppercase tracking-widest mb-3 px-1">
@@ -323,7 +330,7 @@ export default function UploadForm() {
               <div className="absolute inset-0 z-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover/btn:animate-shimmer" />
             )}
           </button>
-        </form>
+        </form>}
       </div>
     </GlassPanel>
   );

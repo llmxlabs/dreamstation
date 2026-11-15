@@ -1,5 +1,6 @@
 import type { NextConfig } from 'next';
 const nextConfig: NextConfig = {
+  distDir: process.env.DREAMSTATION_BUILD_DIR || '.next',
   experimental: { serverActions: { bodySizeLimit: '101mb' } },
   serverExternalPackages: ['better-sqlite3', 'sharp', 'ffmpeg-static'],
   async rewrites() {

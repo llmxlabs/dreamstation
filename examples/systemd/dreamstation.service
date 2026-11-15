@@ -1,0 +1,22 @@
+[Unit]
+Description=DreamStation art display server
+After=network.target
+
+[Service]
+Type=simple
+User=dreamstation
+Group=dreamstation
+WorkingDirectory=/opt/dreamstation
+Environment=NODE_ENV=production
+Environment=NEXT_TELEMETRY_DISABLED=1
+EnvironmentFile=/opt/dreamstation/.env
+ExecStart=/usr/local/bin/node /opt/dreamstation/node_modules/next/dist/bin/next start --hostname 0.0.0.0 --port 3000
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

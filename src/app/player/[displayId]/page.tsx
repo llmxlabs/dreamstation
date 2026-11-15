@@ -2,7 +2,6 @@
 
 import { Suspense, use, useEffect, useState, useRef, memo, useCallback } from "react";
 import Image from "next/image";
-import { getDisplayPlaylist, sendHeartbeat } from "@/actions/displays";
 import { Loader2, MonitorOff, Maximize, Minimize, ChevronLeft, ChevronRight, RefreshCw, Shuffle } from "lucide-react";
 import StarfieldBackground from "@/components/StarfieldBackground";
 
@@ -12,6 +11,12 @@ interface Asset {
   originalUrl: string;
   resizedUrl: string | null;
   thumbnailUrl: string | null;
+  updatedAt?: string;
+}
+
+function sameAsset(a: Asset, b: Asset) {
+  return a.id === b.id && a.originalUrl === b.originalUrl && a.resizedUrl === b.resizedUrl &&
+    a.thumbnailUrl === b.thumbnailUrl && a.updatedAt === b.updatedAt && a.kind === b.kind;
 }
 
 // Blurred ambient background shared by both image and video slides
@@ -90,7 +95,7 @@ const VideoSlide = memo(function VideoSlide({ asset, isActive, fitMode, shouldPr
   prev.isActive === next.isActive &&
   prev.shouldPreload === next.shouldPreload &&
   prev.fitMode === next.fitMode &&
-  prev.asset.id === next.asset.id
+  sameAsset(prev.asset, next.asset)
 );
 
 const ImageSlide = memo(function ImageSlide({ asset, isActive, fitMode }: {
@@ -118,7 +123,7 @@ const ImageSlide = memo(function ImageSlide({ asset, isActive, fitMode }: {
 }, (prev, next) =>
   prev.isActive === next.isActive &&
   prev.fitMode === next.fitMode &&
-  prev.asset.id === next.asset.id
+  sameAsset(prev.asset, next.asset)
 );
 
 function shuffleArray<T>(arr: T[]): T[] {
@@ -140,6 +145,8 @@ function PlayerContent({ displayId }: { displayId: string }) {
     fitMode: "contain" as "contain" | "cover",
   });
   const [currentIndex, setCurrentIndex] = useState(0);
+  const playbackRef = useRef({ playlist, currentIndex });
+  useEffect(() => { playbackRef.current = { playlist, currentIndex }; }, [playlist, currentIndex]);
   const [timerVersion, setTimerVersion] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -202,28 +209,44 @@ function PlayerContent({ displayId }: { displayId: string }) {
     };
   }, [isFullscreen]);
 
-  // Fetch playlist + heartbeat
+  // Stable HTTP endpoints keep long-running displays working across deployments.
+  // Database events give immediate updates; short polling covers lost connections.
   useEffect(() => {
     let cancelled = false;
     let fetching = false;
+    let refetchNeeded = false;
+    let activeRequest: AbortController | undefined;
+    const base = `/api/displays/${encodeURIComponent(displayId)}`;
     const fetchPlaylist = async () => {
-      if (fetching) return;
+      if (cancelled) return;
+      if (fetching) { refetchNeeded = true; return; }
       fetching = true;
+      const controller = new AbortController();
+      activeRequest = controller;
+      const timeout = setTimeout(() => controller.abort(), 10000);
       try {
-        const data = await getDisplayPlaylist(displayId);
+        const response = await fetch(`${base}/playlist`, { cache: 'no-store', signal: controller.signal });
+        if (!response.ok && response.status !== 404) throw new Error('Playlist unavailable');
+        const data: { assets: Asset[]; config: { rotationInterval: number; fitMode: 'contain' | 'cover' } } | null = await response.json();
         if (cancelled) return;
         if (data) {
-          // Stable fingerprint: only reshuffle + reset index when asset list changes.
-          // Config updates (interval, fitMode) flow through independently.
-          const fingerprint = data.assets.map((a) => a.id).join(",");
+          const fingerprint = JSON.stringify(data.assets.map(a => [a.id, a.kind, a.originalUrl, a.resizedUrl, a.thumbnailUrl, a.updatedAt]));
           if (fingerprint !== assetFingerprintRef.current) {
             assetFingerprintRef.current = fingerprint;
             rawPlaylistRef.current = data.assets;
-            setPlaylist(shuffleRef.current ? shuffleArray(data.assets) : [...data.assets]);
-            setCurrentIndex(0);
-            setTimerVersion((v) => v + 1);
+            const previous = playbackRef.current;
+            const currentId = previous.playlist[previous.currentIndex]?.id;
+            const byId = new Map(data.assets.map(asset => [asset.id, asset]));
+            const retained = previous.playlist.flatMap(asset => byId.has(asset.id) ? [byId.get(asset.id)!] : []);
+            const retainedIds = new Set(retained.map(asset => asset.id));
+            const added = data.assets.filter(asset => !retainedIds.has(asset.id));
+            const next = shuffleRef.current ? [...retained, ...shuffleArray(added)] : [...data.assets];
+            const nextIndex = Math.max(0, next.findIndex(asset => asset.id === currentId));
+            setPlaylist(next);
+            setCurrentIndex(nextIndex);
+            if (next[nextIndex]?.id !== currentId) setTimerVersion(v => v + 1);
           }
-          setConfig(data.config);
+          setConfig(previous => previous.rotationInterval === data.config.rotationInterval && previous.fitMode === data.config.fitMode ? previous : data.config);
           setError(null);
         } else {
           assetFingerprintRef.current = "";
@@ -234,8 +257,13 @@ function PlayerContent({ displayId }: { displayId: string }) {
       } catch {
         if (!cancelled && !assetFingerprintRef.current) setError("Error connecting to server");
       } finally {
+        clearTimeout(timeout);
         fetching = false;
         if (!cancelled) setLoading(false);
+        if (refetchNeeded && !cancelled) {
+          refetchNeeded = false;
+          void fetchPlaylist();
+        }
       }
     };
 
@@ -258,15 +286,33 @@ function PlayerContent({ displayId }: { displayId: string }) {
             ? (device.connection.effectiveType || device.connection.type)
             : navigator.onLine ? "online" : "offline";
         }
-        await sendHeartbeat(displayId, batteryLevel, networkType);
+        await fetch(`${base}/heartbeat`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ battery: batteryLevel, network: networkType }),
+        });
       } catch {}
     };
 
-    fetchPlaylist();
-    heartbeat();
-    const pi = setInterval(fetchPlaylist, 30000);
+    void fetchPlaylist();
+    void heartbeat();
+    const events = typeof EventSource !== 'undefined' ? new EventSource(`${base}/events`) : null;
+    events?.addEventListener('sync', fetchPlaylist);
+    const onVisible = () => { if (!document.hidden) void fetchPlaylist(); };
+    window.addEventListener('online', fetchPlaylist);
+    window.addEventListener('focus', fetchPlaylist);
+    document.addEventListener('visibilitychange', onVisible);
+    const pi = setInterval(fetchPlaylist, 5000);
     const hi = setInterval(heartbeat, 30000);
-    return () => { cancelled = true; clearInterval(pi); clearInterval(hi); };
+    return () => {
+      cancelled = true;
+      activeRequest?.abort();
+      events?.close();
+      clearInterval(pi);
+      clearInterval(hi);
+      window.removeEventListener('online', fetchPlaylist);
+      window.removeEventListener('focus', fetchPlaylist);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [displayId]);
 
   // Auto-rotation — timerVersion bump resets countdown after manual nav
@@ -379,6 +425,7 @@ function PlayerContent({ displayId }: { displayId: string }) {
   return (
     <div
       ref={containerRef}
+      data-playlist-size={playlist.length}
       className={`min-h-screen bg-black overflow-hidden relative select-none group/player ${isFullscreen && !overlayVisible ? "cursor-none" : "cursor-auto"}`}
     >
       {playlist.map((asset, index) => {
@@ -392,7 +439,8 @@ function PlayerContent({ displayId }: { displayId: string }) {
 
         return (
           <div
-            key={`slide-${index}`}
+            key={asset.id}
+            data-asset-id={asset.id}
             className="absolute inset-0"
             style={{
               opacity: isActive ? 1 : 0,

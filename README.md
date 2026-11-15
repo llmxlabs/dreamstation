@@ -12,7 +12,7 @@ Turn a spare monitor, tablet, or browser-equipped TV into a digital art display.
 
 - **Mixed-media collections:** JPG, PNG, WebP, MP4 and WebM; automatic image previews and video thumbnails.
 - **Pair any browser:** enter a six-digit code or scan a QR code. Codes expire after ten minutes and work once.
-- **Independent displays:** choose a collection, contain/cover fit, and a 5-second to 10-minute rotation interval per screen.
+- **Independent displays:** play all artwork, including future uploads, or check specific collections to play together. Choose contain/cover fit and a 5-second to 10-minute rotation interval per screen. Shared artwork plays once.
 - **Immersive playback:** image/video crossfades, muted looping video, shuffle, fullscreen and keyboard navigation.
 - **Local storage:** SQLite metadata and ordinary files, with a responsive dashboard and online/offline display status.
 
@@ -60,13 +60,15 @@ Open `http://YOUR-LAN-IP:3000` from the dashboard device and display devices. Al
 
 ## Your first collection
 
+To import an individual X, Midjourney or Grok Imagine link directly, use **Upload New Art → From a link**, or run `npm run grab -- 'POST-URL'`. See [URL imports and CLI setup](docs/IMPORTING.md).
+
 1. Upload your artwork, or try the original and community samples in [`examples/media`](examples/media). The [community source and rights record](examples/media/community/SOURCES.md) identifies the third-party works.
 2. Enter a collection name in **Curation** and press **+**. Expand the collection and select images/videos to add them. Enable **Auto-add to collection** to send subsequent uploads there automatically.
 3. Click **Pair** under **Active Displays**. On your screen, open `/pair`, enter the code and give the screen a name. A QR code can prefill the code.
-4. Assign the collection to the new display. Choose **Contain** to show the whole artwork or **Cover** to fill the screen. Set the rotation interval.
+4. Under **Groups to play**, leave **All artwork** checked to include every current and future upload, or uncheck it and choose specific collections. They play together as one list, with shared artwork included once. Choose **Contain** to show the whole artwork or **Cover** to fill the screen. Set the rotation interval.
 5. Bookmark the player URL. Use its fullscreen control, left/right arrow keys or Space to advance. Shuffle can be toggled in the player.
 
-Changes and heartbeats are polled every 30 seconds. Displays become offline after 90 seconds without a heartbeat. Videos are muted and loop within the configured slide interval; the interval can cut a longer video short. Browser fullscreen requires a click. Keep the server and screen awake for continuous playback.
+Library and configuration changes reach open players automatically through server events, with a five-second polling fallback. Heartbeats run every 30 seconds. Displays become offline after 90 seconds without a heartbeat. Videos are muted and loop within the configured slide interval; the interval can cut a longer video short. Browser fullscreen requires a click. Keep the server and screen awake for continuous playback.
 
 Limits: **50 MiB per file, 100 MiB per batch, 20 files per upload**, and images up to 40 megapixels. Use H.264 MP4 for broad device compatibility. Files are validated and decoded on the server; an invalid batch is rolled back.
 
@@ -102,6 +104,10 @@ One Node.js process serves the dashboard, pairing and player. Prisma stores coll
 `DATABASE_URL` defaults to `file:./prisma/dev.db`. Paths are relative to the project directory. `NEXT_PUBLIC_APP_URL` optionally sets the LAN base URL for pairing QR codes; set it **before building**. Otherwise QR codes use the address of the dashboard you opened. Use `--port` on the start command to choose another port.
 
 Back up the SQLite file, `public/uploads/` and your private `.env` with the server stopped. None of these personal files belongs in Git. Detailed [backup, restore and troubleshooting instructions](docs/DEPLOYMENT.md) cover Windows, Linux and macOS. SQLite is the supported database; PostgreSQL requires a code and schema migration.
+
+Linux installations can use the [systemd startup instructions](docs/DEPLOYMENT.md#linux-startup-after-reboot) to start automatically after reboot. URL imports also keep private source records in `.release/state/` or `DREAMSTATION_STATE_DIR`; include that directory in your private backup.
+
+Release checks inspect tracked paths to reject personal uploads, databases, browser profiles, and local configuration. After verification passes on `main`, the workflow publishes the version in `package.json` using the matching `docs/releases/v<version>.md` notes. Existing releases are left intact.
 
 ## Development and checks
 
